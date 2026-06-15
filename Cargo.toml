@@ -16,6 +16,13 @@ anyhow = "1"
 dialoguer = "0.11"
 indicatif = "0.17"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "chrono"] }
 walkdir = "2"
 dirs = "5"
+
+[profile.release]
+opt-level = "z"     # otimiza para tamanho
+lto = true          # link-time optimization
+codegen-units = 1   # melhor otimização, build mais lento
+strip = true        # remove símbolos de debug
+panic = "abort"     # sem unwinding -> binário menor
