@@ -14,11 +14,12 @@ use tracing_subscriber::fmt::time::ChronoLocal;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    init_logging(cli.verbose);
+    let verbose = cli.verbose;
+    init_logging(verbose);
 
     let result = match cli.command {
         Commands::Init => commands::init::run(),
-        Commands::Deploy { dry_run } => run_deploy(dry_run),
+        Commands::Deploy { dry_run } => run_deploy(dry_run, verbose),
     };
 
     match result {
@@ -30,9 +31,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_deploy(dry_run: bool) -> Result<()> {
+fn run_deploy(dry_run: bool, verbose: bool) -> Result<()> {
     let cfg = Config::load(Path::new(config::CONFIG_PATH))?;
-    commands::deploy::run(&cfg, dry_run)
+    commands::deploy::run(&cfg, dry_run, verbose)
 }
 
 fn init_logging(verbose: bool) {
