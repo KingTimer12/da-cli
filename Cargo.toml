@@ -19,6 +19,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "chrono"] }
 walkdir = "2"
 dirs = "5"
+tar = "0.4"
+flate2 = "1"
 
 [profile.release]
 opt-level = "z"     # otimiza para tamanho

@@ -14,6 +14,12 @@ Ao rodar `da deploy`, o seguinte pipeline é executado:
 4. Apaga os arquivos dentro da pasta de destino na VPS
 5. Transfere o build novo para a VPS
 
+A transferência empacota a pasta de build num `tar.gz` em memória e o
+envia/extrai num único round-trip SSH (`tar -xzf - -C destino`), em vez de
+enviar arquivo por arquivo. Isso é muito mais rápido para builds com muitos
+arquivos pequenos. **Requisito:** o servidor precisa ter o comando `tar`
+(presente por padrão em qualquer Linux).
+
 ## Instalação
 
 Requer Rust (edition 2024). O binário é autossuficiente — `libssh2` e

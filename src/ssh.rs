@@ -1,7 +1,6 @@
 use crate::config::{Auth, Config};
 use anyhow::{Context, Result, bail};
 use std::net::TcpStream;
-use std::path::Path;
 
 /// Reject dangerous remote dirs before any delete.
 pub fn validate_remote_dir(dir: &str) -> Result<()> {
@@ -20,10 +19,9 @@ pub fn validate_remote_dir(dir: &str) -> Result<()> {
 pub trait Transport {
     /// Delete every entry inside `remote_dir` (not the dir itself).
     fn clean_remote_dir(&mut self, remote_dir: &str) -> Result<()>;
-    /// Ensure `remote_dir` exists (mkdir -p semantics).
-    fn ensure_dir(&mut self, remote_dir: &str) -> Result<()>;
-    /// Upload a single local file to `remote_path`.
-    fn upload_file(&mut self, local: &Path, remote_path: &str) -> Result<()>;
+    /// Create `remote_dir` (mkdir -p) and extract a gzip'd tar stream into it
+    /// in a single round-trip.
+    fn upload_archive(&mut self, archive: &[u8], remote_dir: &str) -> Result<()>;
 }
 
 /// Verify the server's host key against `~/.ssh/known_hosts` (TOFU).
@@ -135,9 +133,6 @@ impl Ssh2Transport {
         Ok(Ssh2Transport { session })
     }
 
-    fn sftp(&self) -> Result<ssh2::Sftp> {
-        self.session.sftp().context("falha ao abrir sftp")
-    }
 }
 
 impl Transport for Ssh2Transport {
@@ -156,31 +151,34 @@ impl Transport for Ssh2Transport {
         Ok(())
     }
 
-    fn ensure_dir(&mut self, remote_dir: &str) -> Result<()> {
+    fn upload_archive(&mut self, archive: &[u8], remote_dir: &str) -> Result<()> {
+        use std::io::Write;
+        validate_remote_dir(remote_dir)?;
         let mut channel = self
             .session
             .channel_session()
             .context("falha ao abrir canal")?;
-        channel
-            .exec(&format!("mkdir -p {remote_dir}"))
-            .context("falha ao criar dir remoto")?;
-        channel.wait_close().ok();
-        Ok(())
-    }
+        // Create the target and pipe the gzip'd tar straight into `tar -x`.
+        let cmd = format!("mkdir -p {dir} && tar -xzf - -C {dir}", dir = remote_dir);
+        channel.exec(&cmd).context("falha ao iniciar extração remota")?;
 
-    fn upload_file(&mut self, local: &Path, remote_path: &str) -> Result<()> {
-        let data =
-            std::fs::read(local).with_context(|| format!("falha ao ler {}", local.display()))?;
-        let sftp = self.sftp()?;
-        if let Some(parent) = Path::new(remote_path).parent() {
-            let _ = sftp.mkdir(parent, 0o755);
+        // Write in chunks so a large archive doesn't block on one giant write.
+        for chunk in archive.chunks(64 * 1024) {
+            channel.write_all(chunk).context("falha ao enviar arquivo")?;
         }
-        use std::io::Write;
-        let mut f = sftp
-            .create(Path::new(remote_path))
-            .with_context(|| format!("falha ao criar remoto {remote_path}"))?;
-        f.write_all(&data)
-            .with_context(|| format!("falha ao enviar {remote_path}"))?;
+        channel.send_eof().context("falha ao finalizar envio")?;
+        channel.wait_eof().ok();
+
+        // Surface anything tar printed to stderr on failure.
+        let mut err = String::new();
+        use std::io::Read;
+        channel.stderr().read_to_string(&mut err).ok();
+        channel.wait_close().ok();
+
+        let code = channel.exit_status().context("sem status de saída remoto")?;
+        if code != 0 {
+            bail!("extração remota falhou (tar saiu com {code}): {}", err.trim());
+        }
         Ok(())
     }
 }
