@@ -43,6 +43,45 @@ fn default_true() -> bool {
     true
 }
 
+/// Create a directory tree with owner-only perms (0o700) on Unix.
+#[cfg(unix)]
+fn create_dir_secure(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    if dir.exists() {
+        return Ok(());
+    }
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .recursive(true)
+        .create(dir)
+}
+
+#[cfg(not(unix))]
+fn create_dir_secure(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)
+}
+
+/// Write a file with owner-only perms (0o600) on Unix, chmod'ing even if it
+/// already existed with looser perms.
+#[cfg(unix)]
+fn write_secure(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    f.write_all(data)
+}
+
+#[cfg(not(unix))]
+fn write_secure(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    std::fs::write(path, data)
+}
+
 pub fn expand_tilde(p: &str) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
@@ -64,11 +103,12 @@ impl Config {
 
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
+            create_dir_secure(parent)
                 .with_context(|| format!("não consegui criar {}", parent.display()))?;
         }
         let text = toml::to_string_pretty(self).context("falha ao serializar config")?;
-        std::fs::write(path, text)
+        // Config may hold a plaintext password — write owner-only (0o600).
+        write_secure(path, text.as_bytes())
             .with_context(|| format!("falha ao escrever {}", path.display()))?;
         Ok(())
     }
@@ -151,5 +191,23 @@ remote_dir = "/x"
     #[test]
     fn expand_tilde_passthrough_absolute() {
         assert_eq!(expand_tilde("/abs/path"), PathBuf::from("/abs/path"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_writes_owner_only_perms() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join("da_test_perms");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        sample(Auth::Password {
+            password: "secret".into(),
+        })
+        .save(&path)
+        .unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "config deve ser 0o600, got {mode:o}");
+        let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "dir .da deve ser 0o700, got {dir_mode:o}");
     }
 }
