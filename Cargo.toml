@@ -1,5 +1,5 @@
 [package]
-name = "dac-cli"
+name = "da-cli"
 version = "0.1.0"
 edition = "2024"
 

@@ -31,21 +31,41 @@ arquivos pequenos. **Requisito:** o servidor precisa ter o comando `tar`
 
 ## Instalação
 
-Requer Rust (edition 2024). O binário é autossuficiente — `libssh2` e
-`openssl` são compilados junto (feature `vendored-openssl`), sem
+Binários prontos para Linux, macOS (Intel e Apple Silicon) e Windows são
+publicados em [Releases](https://github.com/KingTimer12/da-cli/releases). O
+binário é autossuficiente — `libssh2` e `openssl` são compilados junto, sem
 dependências de sistema.
 
+### Linux / macOS (curl ou wget)
+
 ```bash
-cargo build --release
-# binário gerado em:
-./target/release/da
+curl -fsSL https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.sh | sh
 ```
 
-Opcional, instalar no PATH:
+Instala em `~/.local/bin` por padrão. Variáveis opcionais: `DA_VERSION`
+(ex: `v0.1.0`) e `DA_INSTALL_DIR`.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.ps1 | iex
+```
+
+Instala em `%LOCALAPPDATA%\Programs\da` e adiciona ao PATH do usuário
+(reabra o terminal depois).
+
+### A partir do código
+
+Requer Rust (edition 2024).
 
 ```bash
 cargo install --path .
+# ou:
+cargo build --release   # binário em ./target/release/da
 ```
+
+> Os one-liners apontam para o branch `main`. Se o branch padrão do repo for
+> outro (ex: `master`), ajuste a URL.
 
 ## Uso
 
@@ -141,6 +161,22 @@ A senha **nunca** é logada. A autenticação loga apenas o tipo (`key` /
   validada; se mudar (possível MITM), o deploy é abortado.
 - **Proteção do remoto:** `clean_remote` apaga apenas o *conteúdo* de
   `remote_dir`, nunca a própria pasta, e recusa `/` ou caminho vazio.
+
+## Publicação (release)
+
+O CI (`.github/workflows/release.yml`) builda os binários das 4 plataformas e
+anexa os artefatos (`.tar.gz` / `.zip` + `.sha256`) a um GitHub Release quando
+uma tag `v*` é enviada:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Os scripts `install.sh` / `install.ps1` baixam o último release
+automaticamente. (Pacote `winget` não está incluído — exige submeter um
+manifesto ao `microsoft/winget-pkgs`; o instalador `irm` cobre o Windows por
+enquanto.)
 
 ## Desenvolvimento
 
