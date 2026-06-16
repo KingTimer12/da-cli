@@ -1,58 +1,60 @@
 use crate::config::{Auth, Build, CONFIG_PATH, Config, Deploy};
 use anyhow::{Context, Result};
-use dialoguer::{Confirm, Input, Password, Select};
 use std::path::Path;
 
 pub fn run() -> Result<()> {
     let path = Path::new(CONFIG_PATH);
-    if path.exists()
-        && !Confirm::new()
-            .with_prompt(format!("{CONFIG_PATH} já existe. Sobrescrever?"))
-            .default(false)
-            .interact()?
-    {
-        println!("init cancelado");
-        return Ok(());
+
+    cliclack::intro("da init — configurar deploy")?;
+
+    if path.exists() {
+        let overwrite = cliclack::confirm(format!("{CONFIG_PATH} já existe. Sobrescrever?"))
+            .initial_value(false)
+            .interact()?;
+        if !overwrite {
+            cliclack::outro("init cancelado")?;
+            return Ok(());
+        }
     }
 
-    let host: String = Input::new().with_prompt("Host / IP da VPS").interact_text()?;
-    let port: u16 = Input::new()
-        .with_prompt("Porta SSH")
-        .default(22)
-        .interact_text()?;
-    let user: String = Input::new().with_prompt("Usuário").interact_text()?;
-
-    let auth_kind = Select::new()
-        .with_prompt("Tipo de autenticação")
-        .items(&["chave (.pem)", "senha"])
-        .default(0)
+    let host: String = cliclack::input("Host / IP da VPS")
+        .placeholder("1.2.3.4")
         .interact()?;
-    let auth = if auth_kind == 0 {
-        let key_path: String = Input::new()
-            .with_prompt("Caminho da chave")
-            .default("~/.ssh/id_rsa".into())
-            .interact_text()?;
+    let port: u16 = cliclack::input("Porta SSH")
+        .default_input("22")
+        .interact()?;
+    let user: String = cliclack::input("Usuário")
+        .placeholder("root")
+        .interact()?;
+
+    let auth_kind: &str = cliclack::select("Tipo de autenticação")
+        .item("key", "Chave (.pem / .key)", "recomendado")
+        .item("password", "Senha", "salva em texto puro")
+        .interact()?;
+    let auth = if auth_kind == "key" {
+        let key_path: String = cliclack::input("Caminho da chave")
+            .default_input("~/.ssh/id_rsa")
+            .interact()?;
         Auth::Key { key_path }
     } else {
-        let password = Password::new().with_prompt("Senha").interact()?;
-        eprintln!("AVISO: a senha será salva em texto puro em {CONFIG_PATH}");
+        let password: String = cliclack::password("Senha").mask('▪').interact()?;
+        cliclack::log::warning(format!(
+            "a senha será salva em texto puro em {CONFIG_PATH}"
+        ))?;
         Auth::Password { password }
     };
 
-    let command: String = Input::new()
-        .with_prompt("Comando de build")
-        .default("npm run build".into())
-        .interact_text()?;
-    let output_dir: String = Input::new()
-        .with_prompt("Pasta de output do build")
-        .default("dist".into())
-        .interact_text()?;
-    let remote_dir: String = Input::new()
-        .with_prompt("Pasta destino na VPS")
-        .interact_text()?;
-    let clean_remote = Confirm::new()
-        .with_prompt("Apagar arquivos remotos antes de enviar?")
-        .default(true)
+    let command: String = cliclack::input("Comando de build")
+        .default_input("npm run build")
+        .interact()?;
+    let output_dir: String = cliclack::input("Pasta de output do build")
+        .default_input("dist")
+        .interact()?;
+    let remote_dir: String = cliclack::input("Pasta destino na VPS")
+        .placeholder("/var/www/app")
+        .interact()?;
+    let clean_remote = cliclack::confirm("Apagar arquivos remotos antes de enviar?")
+        .initial_value(true)
         .interact()?;
 
     let cfg = Config {
@@ -71,7 +73,8 @@ pub fn run() -> Result<()> {
     };
     cfg.save(path)?;
     ensure_gitignore().context("falha ao atualizar .gitignore")?;
-    println!("config salva em {CONFIG_PATH}");
+
+    cliclack::outro(format!("config salva em {CONFIG_PATH} — rode `da deploy`"))?;
     Ok(())
 }
 

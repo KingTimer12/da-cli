@@ -53,11 +53,13 @@ fn verify_host_key(session: &ssh2::Session, host: &str, port: u16) -> Result<()>
         CheckResult::Failure => bail!("falha ao verificar host key de {host}:{port}"),
         CheckResult::NotFound => {
             let fp = fingerprint_sha256(session);
-            eprintln!("Host {host}:{port} desconhecido.");
-            eprintln!("Fingerprint SHA256: {fp}");
-            let accept = dialoguer::Confirm::new()
-                .with_prompt("Confiar nesta máquina e salvar em known_hosts?")
-                .default(false)
+            cliclack::note(
+                format!("Host {host}:{port} desconhecido"),
+                format!("Fingerprint SHA256:\n{fp}"),
+            )
+            .ok();
+            let accept = cliclack::confirm("Confiar nesta máquina e salvar em known_hosts?")
+                .initial_value(false)
                 .interact()
                 .context("não foi possível ler confirmação (TTY ausente?)")?;
             if !accept {

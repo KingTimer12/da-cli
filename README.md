@@ -4,6 +4,15 @@ CLI em Rust para automatizar o deploy de frontend para uma VPS via SSH/SFTP.
 O objetivo é reduzir todo o processo manual (rebuild + upload) a um único
 comando: `da deploy`.
 
+## Motivação
+
+O projeto não tenta substituir um pipeline de CI/CD — é uma forma rápida de
+fazer deploy direto, sem CI/CD, para contextos onde montar/usar um pipeline
+não é desejado. A dor concreta que ele resolve: atualizar o frontend
+manualmente (build + subir arquivo por arquivo) interrompe o raciocínio
+lógico no meio de uma tarefa. `da deploy` colapsa isso num comando só, para
+o foco ficar no código e não no processo de publicação.
+
 ## O que faz
 
 Ao rodar `da deploy`, o seguinte pipeline é executado:
