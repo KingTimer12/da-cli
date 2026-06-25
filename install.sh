@@ -1,7 +1,7 @@
 #!/bin/sh
 # Instalador do DA (Deploy Automático) para Linux e macOS.
 #
-#   curl -fsSL https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/KingTimer12/da-cli/master/install.sh | sh
 #
 # Variáveis opcionais:
 #   DA_VERSION      tag específica (ex: v0.1.0). Default: latest.

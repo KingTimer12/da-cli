@@ -20,14 +20,22 @@ Ao rodar `da deploy`, o seguinte pipeline é executado:
 1. Apaga a pasta de build local antiga
 2. Roda o comando de build
 3. Conecta na VPS (verificando o host key)
-4. Apaga os arquivos dentro da pasta de destino na VPS
-5. Transfere o build novo para a VPS
+4. Salva um backup do conteúdo remoto atual em `.da/backups/`
+5. Apaga os arquivos dentro da pasta de destino na VPS
+6. Transfere o build novo para a VPS
 
 A transferência empacota a pasta de build num `tar.gz` em memória e o
 envia/extrai num único round-trip SSH (`tar -xzf - -C destino`), em vez de
 enviar arquivo por arquivo. Isso é muito mais rápido para builds com muitos
 arquivos pequenos. **Requisito:** o servidor precisa ter o comando `tar`
 (presente por padrão em qualquer Linux).
+
+Recursos relacionados, detalhados abaixo:
+
+- **`da undo`** — reverte o último deploy a partir do backup salvo no passo 4.
+- **`.daignore`** — controla o que não é enviado (client) e o que não é
+  apagado no remoto (server), com sintaxe estilo `.gitignore`.
+- **`da upgrade`** — atualiza o próprio binário a partir da última release.
 
 ## Instalação
 
@@ -39,7 +47,7 @@ dependências de sistema.
 ### Linux / macOS (curl ou wget)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/KingTimer12/da-cli/master/install.sh | sh
 ```
 
 Instala em `~/.local/bin` por padrão. Variáveis opcionais: `DA_VERSION`
@@ -48,7 +56,7 @@ Instala em `~/.local/bin` por padrão. Variáveis opcionais: `DA_VERSION`
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/KingTimer12/da-cli/master/install.ps1 | iex
 ```
 
 Instala em `%LOCALAPPDATA%\Programs\da` e adiciona ao PATH do usuário
@@ -64,7 +72,7 @@ cargo install --path .
 cargo build --release   # binário em ./target/release/da
 ```
 
-> Os one-liners apontam para o branch `main`. Se o branch padrão do repo for
+> Os one-liners apontam para o branch `master`. Se o branch padrão do repo for
 > outro (ex: `master`), ajuste a URL.
 
 ## Uso
@@ -89,6 +97,30 @@ Roda o pipeline completo.
 
 ```bash
 da deploy
+```
+
+### `da undo`
+
+Antes de limpar o remoto, todo `da deploy` salva um backup (`.tar.gz`) do que
+estava lá em `.da/backups/`. Se o deploy mandou pra pasta errada ou apagou algo
+indevido, `da undo` restaura o backup mais recente:
+
+```bash
+da undo                       # restaura o backup mais recente
+da undo --id 20260625-143000  # restaura um backup específico
+da undo --dry-run             # mostra o que seria restaurado
+```
+
+Mantém os 5 backups mais recentes (os antigos são apagados). Liste os ids com
+`ls .da/backups/`.
+
+### `da upgrade`
+
+Baixa a última release do GitHub e troca o binário em uso, no lugar:
+
+```bash
+da upgrade           # atualiza se houver versão nova
+da upgrade --force   # reinstala mesmo já estando na última
 ```
 
 ### `da deploy --dry-run`
@@ -137,6 +169,30 @@ output_dir = "dist"          # pasta gerada pelo build (relativa à raiz)
 remote_dir = "/var/www/app"  # pasta de destino na VPS
 clean_remote = true          # apaga conteúdo do remoto antes (default: true)
 ```
+
+## Ignorar arquivos — `.daignore`
+
+Três arquivos opcionais na raiz do projeto controlam o que é enviado e o que é
+apagado, com sintaxe **estilo `.gitignore`** (globs, `pasta/`, `/ancorado`):
+
+| Arquivo            | Efeito                                                              |
+|--------------------|--------------------------------------------------------------------|
+| `.daignore`        | Geral: não envia (client) **e** não apaga no remoto (server).      |
+| `.daignore.client` | Só client: não inclui esses arquivos no pacote enviado.            |
+| `.daignore.server` | Só server: não apaga esses arquivos no remoto ao limpar.          |
+
+Exemplo — não enviar source maps, e nunca apagar a pasta de uploads do servidor:
+
+```gitignore
+# .daignore.client
+*.map
+
+# .daignore.server
+uploads/
+```
+
+Quando há regras de server, a limpeza deixa de ser um wipe completo: o DA lista
+os arquivos remotos e apaga só os não-protegidos.
 
 ## Logging
 

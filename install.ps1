@@ -1,6 +1,6 @@
 # Instalador do DA (Deploy Automático) para Windows.
 #
-#   irm https://raw.githubusercontent.com/KingTimer12/da-cli/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/KingTimer12/da-cli/master/install.ps1 | iex
 #
 # Variáveis opcionais (defina antes de rodar):
 #   $env:DA_VERSION      tag específica (ex: v0.1.0). Default: latest.

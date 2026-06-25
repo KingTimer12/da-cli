@@ -22,6 +22,13 @@ pub trait Transport {
     /// Create `remote_dir` (mkdir -p) and extract a gzip'd tar stream into it
     /// in a single round-trip.
     fn upload_archive(&mut self, archive: &[u8], remote_dir: &str) -> Result<()>;
+    /// Pack the *current* contents of `remote_dir` into a gzip'd tar (for backup).
+    /// Returns an empty vec if the dir doesn't exist yet.
+    fn download_archive(&mut self, remote_dir: &str) -> Result<Vec<u8>>;
+    /// List file paths under `remote_dir`, relative to it (posix separators).
+    fn list_remote_files(&mut self, remote_dir: &str) -> Result<Vec<String>>;
+    /// Delete the given relative paths inside `remote_dir`.
+    fn delete_remote_paths(&mut self, remote_dir: &str, rel_paths: &[String]) -> Result<()>;
 }
 
 /// Verify the server's host key against `~/.ssh/known_hosts` (TOFU).
@@ -183,6 +190,89 @@ impl Transport for Ssh2Transport {
         }
         Ok(())
     }
+
+    fn download_archive(&mut self, remote_dir: &str) -> Result<Vec<u8>> {
+        use std::io::Read;
+        validate_remote_dir(remote_dir)?;
+        let mut channel = self
+            .session
+            .channel_session()
+            .context("falha ao abrir canal")?;
+        // Empacota o conteúdo atual; se a pasta não existir, sai com tar vazio.
+        let cmd = format!(
+            "if [ -d {dir} ]; then tar -czf - -C {dir} . ; fi",
+            dir = shell_quote(remote_dir)
+        );
+        channel.exec(&cmd).context("falha ao empacotar remoto")?;
+        let mut buf = Vec::new();
+        channel
+            .read_to_end(&mut buf)
+            .context("falha ao baixar backup remoto")?;
+        channel.wait_close().ok();
+        let code = channel.exit_status().unwrap_or(0);
+        if code != 0 {
+            bail!("backup remoto falhou (tar saiu com {code})");
+        }
+        Ok(buf)
+    }
+
+    fn list_remote_files(&mut self, remote_dir: &str) -> Result<Vec<String>> {
+        use std::io::Read;
+        validate_remote_dir(remote_dir)?;
+        let mut channel = self
+            .session
+            .channel_session()
+            .context("falha ao abrir canal")?;
+        // Caminhos relativos (find imprime "./a/b"); striplado depois.
+        let cmd = format!(
+            "cd {dir} 2>/dev/null && find . -type f -printf '%P\\n' 2>/dev/null || true",
+            dir = shell_quote(remote_dir)
+        );
+        channel.exec(&cmd).context("falha ao listar remoto")?;
+        let mut out = String::new();
+        channel.read_to_string(&mut out).ok();
+        channel.wait_close().ok();
+        let files = out
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect();
+        Ok(files)
+    }
+
+    fn delete_remote_paths(&mut self, remote_dir: &str, rel_paths: &[String]) -> Result<()> {
+        validate_remote_dir(remote_dir)?;
+        if rel_paths.is_empty() {
+            return Ok(());
+        }
+        let base = remote_dir.trim_end_matches('/');
+        // Apaga em lotes pra não estourar o limite de tamanho de comando.
+        for batch in rel_paths.chunks(200) {
+            let args: String = batch
+                .iter()
+                .map(|p| shell_quote(&format!("{base}/{p}")))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut channel = self
+                .session
+                .channel_session()
+                .context("falha ao abrir canal")?;
+            channel
+                .exec(&format!("rm -f {args}"))
+                .context("falha ao apagar arquivos remotos")?;
+            use std::io::Read;
+            let mut sink = String::new();
+            channel.read_to_string(&mut sink).ok();
+            channel.wait_close().ok();
+        }
+        Ok(())
+    }
+}
+
+/// Quote a string for safe use as a single shell argument.
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 #[cfg(test)]

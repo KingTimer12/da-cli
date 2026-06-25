@@ -21,4 +21,19 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Restaura o backup do remoto feito antes do último deploy
+    Undo {
+        /// Id do backup (ex: 20260625-143000). Padrão: o mais recente
+        #[arg(long)]
+        id: Option<String>,
+        /// Mostra o que seria restaurado sem alterar nada
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Baixa e instala a última versão do GitHub
+    Upgrade {
+        /// Reinstala mesmo se já estiver na última versão
+        #[arg(long)]
+        force: bool,
+    },
 }
